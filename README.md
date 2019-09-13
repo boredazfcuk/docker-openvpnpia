@@ -1,7 +1,7 @@
 # docker-openvpnpia
 Beta - An Alpine Linux Docker container for Private Internet Access's OpenVPN client
 
-This container is the base container for a stack I am currently working on. There will be five other applications which share this container's network stack.
+This container is currently work in progress and will become the base container for a stack I am currently working on. There will be five other applications which share this container's network stack.
 
 ## MANDATORY VARIABLES
 
