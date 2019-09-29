@@ -22,6 +22,7 @@ echo "$(date '+%d/%m/%Y - %H:%M:%S') | Install dependencies" && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Enable iptables logging" && \
    sed -i -e 's/#stack=log1:NFLOG,base1:BASE,ifi1:IFINDEX,ip2str1:IP2STR,print1:PRINTPKT,emu1:LOGEMU/stack=log1:NFLOG,base1:BASE,ifi1:IFINDEX,ip2str1:IP2STR,print1:PRINTPKT,emu1:LOGEMU/' -e 's/ulogd_syslogemu.log/iptables.log/' /etc/ulogd.conf && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Clean up" && \
+   rm -r "${TEMP}" && \
    apk del --no-progress --purge build-deps && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | ***** BUILD COMPLETE *****"
 
