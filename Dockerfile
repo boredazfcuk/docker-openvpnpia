@@ -6,13 +6,13 @@ ENV CONFIGDIR="/config" \
   APPDEPENDENCIES="openvpn conntrack-tools ulogd"
 
 COPY start-openvpn.sh /usr/local/bin/start-openvpn.sh
-COPY set-posttunnelrules.sh /usr/local/bin/set-posttunnelrules.sh
+COPY healthcheck.sh /usr/local/bin/healthcheck.sh
 
 RUN echo "$(date '+%d/%m/%Y - %H:%M:%S') | ***** BUILD STARTED *****" && \
    echo "$(date '+%d/%m/%Y - %H:%M:%S') | Create application directory" && \
    mkdir -p "${APPBASE}" && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Set permissions on launch file" && \
-   chmod +x /usr/local/bin/start-openvpn.sh /usr/local/bin/set-posttunnelrules.sh && \
+   chmod +x /usr/local/bin/start-openvpn.sh /usr/local/bin/healthcheck.sh && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Install build dependencies" && \
    apk add --no-cache --no-progress --virtual=build-deps ${BUILDDEPENDENCIES} && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Install dependencies" && \
@@ -26,7 +26,7 @@ echo "$(date '+%d/%m/%Y - %H:%M:%S') | Clean up" && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | ***** BUILD COMPLETE *****"
 
 HEALTHCHECK --start-period=10s --interval=1m --timeout=10s \
-  CMD (if [ $(ip -4 a | grep -c tun.) -eq "0" ]; then exit 1; elif [ $(traceroute -m 1 1.1.1.1 | grep -c "$(ip -4 r | grep eth. | grep default | awk '{print $3}')") -ne 0 ]; then exit 1; fi)
+  CMD /usr/local/bin/healthcheck.sh
   
 VOLUME "${CONFIGDIR}"
 
