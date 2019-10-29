@@ -116,6 +116,9 @@ InitialisePretunnelRules(){
    iptables -I INPUT -i lo -j ACCEPT
    iptables -I OUTPUT -o lo -j ACCEPT
 
+   echo "$(date '+%c') Allow LAN ping"
+   iptables -I INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p icmp -j ACCEPT
+
    echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over LAN adapter"
    iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j ACCEPT
    iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j ACCEPT
@@ -128,28 +131,27 @@ InitialisePretunnelRules(){
    iptables -A INPUT -i "${LANADAPTER}" -s "${LANIP}" -d "${BCASTADDR}" -p udp --dport 6771 -j ACCEPT
 
    if [ ! -z "${SABNZBDGID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for SABnzbd"
+      echo "$(date '+%c') Adding incoming and outgoing rules for SABnzbd"
       iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8080 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${SABNZBDGID}" -j ACCEPT
    fi
    if [ ! -z "${DELUGEGID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for Deluge"
+      echo "$(date '+%c') Adding incoming and outgoing rules for Deluge"
       iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8112 -j ACCEPT
-      iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIPSUBNET}" -p tcp --sport 8112 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${DELUGEGID}" -j ACCEPT
    fi
    if [ ! -z "${COUCHPOTATOGID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for CouchPotato"
+      echo "$(date '+%c') Adding incoming and outgoing rules for CouchPotato"
       iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 5050 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${COUCHPOTATOGID}" -j ACCEPT
    fi
    if [ ! -z "${SICKGEARGID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for SickGear"
+      echo "$(date '+%c') Adding incoming and outgoing rules for SickGear"
       iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8081 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${SICKGEARGID}" -j ACCEPT
    fi
    if [ ! -z "${HEADPHONESGID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for Headphones"
+      echo "$(date '+%c') Adding incoming and outgoing rules for Headphones"
       iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8181 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${HEADPHONESGID}" -j ACCEPT
    fi
@@ -170,8 +172,6 @@ InitialisePosttunnelRules(){
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -d 209.222.18.218 -j ACCEPT
 
    echo "$(date '+%c') Prevent DNS leaks by dropping outgoing DNS traffic to OpenVPN PIA servers over LAN adapter once VPN tunel is up."
-   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j ACCEPT
-   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j ACCEPT
    iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j DROP
    iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j DROP
 
@@ -188,28 +188,12 @@ InitialisePosttunnelRules(){
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 80 -j ACCEPT
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 443 -j ACCEPT
 
-   if [ ! -z "${SABNZBDUID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for SABnzbd"
-   fi
-
-   if [ ! -z "${DELUGEUID}" ]; then
+   if [ ! -z "${DELUGEGID}" ]; then
       echo "$(date '+%c') Adding outgoing rules for Deluge"
       iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p tcp --dport 58800:59900 -j ACCEPT
       iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 58800:59900 -j ACCEPT
       iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p udp --dport 53160 -j ACCEPT
       iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -p udp --dport 6771 -j ACCEPT
-   fi
-
-   if [ ! -z "${COUCHPOTATOUID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for CouchPotato"
-   fi
-
-   if [ ! -z "${SICKGEARUID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for SickGear"
-   fi
-
-   if [ ! -z "${HEADPHONESUID}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for Headphones"
    fi
 
    iptables-save > "${CONFIGDIR}/rules.v4.posttunnel.default"
@@ -223,7 +207,7 @@ GetLANInfo(){
    LANIP="$(hostname -i)"
    BCASTADDR="$(ip -4 a | grep "${LANIP}" | awk '{print $4}')"
    LANIPSUBNET="$(ip -4 r | grep "${LANIP}" | awk '{print $1}')"
-   LANADAPTER="$(ip ad | grep eth. | grep inet | awk '{print $7}')"
+   LANADAPTER="$(ip ad | grep eth.$ | awk '{print $7}')"
    VPNPORT="$(grep "remote " "${APPBASE}/${CONFIGFILE}" | awk '{print $3}')"
    echo "$(date '+%c') LAN Info: ${LANADAPTER} ${LANIP} ${LANIPSUBNET} ${BCASTADDR}"
 
@@ -231,8 +215,8 @@ GetLANInfo(){
 
 GetVPNInfo(){
 
-   VPNIP="$(ip ad | grep tun. | grep inet | awk '{print $2}')"
-   VPNADAPTER="$(ip ad | grep tun. | grep inet | awk '{print $7}')"
+   VPNIP="$(ip ad | grep tun.$ | awk '{print $2}')"
+   VPNADAPTER="$(ip ad | grep tun.$ | awk '{print $7}')"
    echo "$(date '+%c') VPN Info: ${VPNADAPTER} ${VPNIP} ${VPNPORT}"
 
 }
@@ -265,7 +249,6 @@ CreatePretunnelRules(){
 
    echo "$(date '+%c') Load custom pre-tunnel rules"
    iptables-restore < "${CONFIGDIR}/rules.v4.pretunnel.custom"
-
    CreateLoggingRules
 
 }
@@ -280,6 +263,8 @@ CreatePosttunnelRules(){
       CreatePretunnelRules
    fi
 
+   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j ACCEPT
+   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j ACCEPT
    DeleteLoggingRules
 
    echo "$(date '+%c') Load custom post-tunnel rules"
