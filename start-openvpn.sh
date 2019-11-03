@@ -104,9 +104,9 @@ StartOpenVPN(){
 
 }
 
-InitialisePretunnelRules(){
+LoadPretunnelRules(){
 
-   echo "$(date '+%c') Initialise pre-tunnel rules"
+   echo "$(date '+%c') Load pre-tunnel rules"
 
    echo "$(date '+%c') Allow established and related traffic"
    iptables -I INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
@@ -133,6 +133,7 @@ InitialisePretunnelRules(){
    if [ ! -z "${SABNZBDGID}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SABnzbd"
       iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8080 -j ACCEPT
+      iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 9090 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${SABNZBDGID}" -j ACCEPT
    fi
    if [ ! -z "${DELUGEGID}" ]; then
@@ -156,20 +157,21 @@ InitialisePretunnelRules(){
       iptables -A OUTPUT -m owner --gid-owner "${HEADPHONESGID}" -j ACCEPT
    fi
 
-   echo "$(date '+%c') Save iptables pre-tunnel default configuration"
-   iptables-save > "${CONFIGDIR}/rules.v4.pretunnel.default"
-   echo "$(date '+%c') Create custom pre-tunnel rules file from default configuration"
-   cp "${CONFIGDIR}/rules.v4.pretunnel.default" "${CONFIGDIR}/rules.v4.pretunnel.custom"
-
 }
 
-InitialisePosttunnelRules(){
+LoadPosttunnelRules(){
 
-   echo "$(date '+%c') Initialise post-tunnel rules"
+   echo "$(date '+%c') Load post-tunnel rules"
 
-   echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over VPN adapter"
+   DeleteLoggingRules
+
+   echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over the VPN adapter"
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -d 209.222.18.222 -j ACCEPT
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -d 209.222.18.218 -j ACCEPT
+
+   echo "$(date '+%c') Remove rules allowing outgoing DNS traffic over the LAN adapter"
+   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j ACCEPT
+   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j ACCEPT
 
    echo "$(date '+%c') Prevent DNS leaks by dropping outgoing DNS traffic to OpenVPN PIA servers over LAN adapter once VPN tunel is up."
    iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j DROP
@@ -196,9 +198,7 @@ InitialisePosttunnelRules(){
       iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -p udp --dport 6771 -j ACCEPT
    fi
 
-   iptables-save > "${CONFIGDIR}/rules.v4.posttunnel.default"
-   echo "$(date '+%c') Create custom post-tunnel rules file from default configuration"
-   cp "${CONFIGDIR}/rules.v4.posttunnel.default" "${CONFIGDIR}/rules.v4.posttunnel.custom"
+   CreateLoggingRules
 
 }
 
@@ -239,49 +239,17 @@ SetDefaultPolicies(){
 
 }
 
-CreatePretunnelRules(){
-
-   if [ ! -f "${CONFIGDIR}/rules.v4.pretunnel.default" ]; then
-      ClearAllRules
-      SetDefaultPolicies
-      InitialisePretunnelRules
-   fi
-
-   echo "$(date '+%c') Load custom pre-tunnel rules"
-   iptables-restore < "${CONFIGDIR}/rules.v4.pretunnel.custom"
-   CreateLoggingRules
-
-}
-
-CreatePosttunnelRules(){
-
-   if [ ! -f "${CONFIGDIR}/rules.v4.posttunnel.default" ]; then
-      ClearAllRules
-      SetDefaultPolicies
-      InitialisePosttunnelRules
-      ClearAllRules
-      CreatePretunnelRules
-   fi
-
-   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j ACCEPT
-   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j ACCEPT
-   DeleteLoggingRules
-
-   echo "$(date '+%c') Load custom post-tunnel rules"
-   iptables-restore --noflush < "${CONFIGDIR}/rules.v4.posttunnel.custom"
-
-   CreateLoggingRules
-
-}
-
 echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
 CreateTunnelAdapter
 ConfigureAuthentication
 SetServerLocation
 ConfigureLogging
 GetLANInfo
-CreatePretunnelRules
+ClearAllRules
+SetDefaultPolicies
+LoadPretunnelRules
+CreateLoggingRules
 StartOpenVPN
 GetVPNInfo
-CreatePosttunnelRules
+LoadPosttunnelRules
 while [ ! -z "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
