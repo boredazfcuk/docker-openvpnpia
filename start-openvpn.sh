@@ -206,7 +206,7 @@ GetLANInfo(){
 
    LANIP="$(hostname -i)"
    BCASTADDR="$(ip -4 a | grep "${LANIP}" | awk '{print $4}')"
-   LANIPSUBNET="$(ip -4 r | grep "${LANIP}" | awk '{print $1}')"
+   LANIPSUBNET="$(ip -4 r | grep "${LANIP}" | grep -v via | awk '{print $1}')"
    LANADAPTER="$(ip ad | grep eth.$ | awk '{print $7}')"
    VPNPORT="$(grep "remote " "${APPBASE}/${CONFIGFILE}" | awk '{print $3}')"
    echo "$(date '+%c') LAN Info: ${LANADAPTER} ${LANIP} ${LANIPSUBNET} ${BCASTADDR}"
