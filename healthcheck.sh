@@ -10,3 +10,5 @@ elif [ $(traceroute -m 1 "${tunnel_adapter_ip}" | grep -c "${tunnel_adapter_ip}"
    echo "Incorrect route"
    exit 1
 fi
+echo "Tunnel adapter and routing OK"
+exit 0

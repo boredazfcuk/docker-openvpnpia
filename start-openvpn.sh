@@ -194,7 +194,7 @@ LoadPosttunnelRules(){
       echo "$(date '+%c') Adding outgoing rules for Deluge"
       iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p tcp --dport 58800:59900 -j ACCEPT
       iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 58800:59900 -j ACCEPT
-      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p udp --dport 53160 -j ACCEPT
+      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p udp --dport 57700 -j ACCEPT
       iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -p udp --dport 6771 -j ACCEPT
    fi
 
@@ -239,6 +239,7 @@ SetDefaultPolicies(){
 
 }
 
+echo -e "\n"
 echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
 CreateTunnelAdapter
 ConfigureAuthentication
