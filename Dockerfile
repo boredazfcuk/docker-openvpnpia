@@ -1,23 +1,23 @@
 FROM alpine:latest
 MAINTAINER boredazfcuk
-ARG BUILDDEPENDENCIES="curl unzip"
-ARG APPDEPENDENCIES="openvpn conntrack-tools ulogd"
-ENV CONFIGDIR="/config" \
-  APPBASE="/OpenVPNPIA"
+ARG build_dependencies="curl unzip"
+ARG app_dependencies="openvpn conntrack-tools ulogd"
+ENV config_dir="/config" \
+  app_base_dir="/OpenVPNPIA"
 
 
 RUN echo "$(date '+%d/%m/%Y - %H:%M:%S') | ***** BUILD STARTED *****" && \
    echo "$(date '+%d/%m/%Y - %H:%M:%S') | Create application directory" && \
-   mkdir -p "${APPBASE}" && \
+   mkdir -p "${app_base_dir}" && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Install build dependencies" && \
-   apk add --no-cache --no-progress --virtual=build-deps ${BUILDDEPENDENCIES} && \
+   apk add --no-cache --no-progress --virtual=build-deps ${build_dependencies} && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Install dependencies" && \
-   apk add --no-cache --no-progress ${APPDEPENDENCIES} && \
-   TEMP="$(mktemp -d)" && \
-   curl -sSL "https://www.privateinternetaccess.com/openvpn/openvpn-strong.zip" -o "${TEMP}/openvpn-strong.zip" && \
-   unzip "${TEMP}/openvpn-strong.zip" -d "${APPBASE}" && \
+   apk add --no-cache --no-progress ${app_dependencies} && \
+   temp_dir="$(mktemp -d)" && \
+   curl -sSL "https://www.privateinternetaccess.com/openvpn/openvpn-strong.zip" -o "${temp_dir}/openvpn-strong.zip" && \
+   unzip "${temp_dir}/openvpn-strong.zip" -d "${app_base_dir}" && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Clean up" && \
-   rm -r "${TEMP}" && \
+   rm -r "${temp_dir}" && \
    apk del --no-progress --purge build-deps
 
 COPY start-openvpn.sh /usr/local/bin/start-openvpn.sh
@@ -30,7 +30,7 @@ echo "$(date '+%d/%m/%Y - %H:%M:%S') | ***** BUILD COMPLETE *****"
 HEALTHCHECK --start-period=10s --interval=1m --timeout=10s \
   CMD /usr/local/bin/healthcheck.sh
   
-VOLUME "${CONFIGDIR}"
-WORKDIR "${APPBASE}"
+VOLUME "${config_dir}"
+WORKDIR "${app_base_dir}"
 
 ENTRYPOINT ["/usr/local/bin/start-openvpn.sh"]

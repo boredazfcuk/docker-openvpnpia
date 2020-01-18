@@ -9,30 +9,30 @@ CreateTunnelAdapter(){
 }
 
 ConfigureAuthentication(){
-   if [ -f "${CONFIGDIR}/auth.conf" ]; then
-      if [ ! -z "${PIAUSER}" ]; then echo "$(date '+%c') WARNING: ${CONFIGDIR}/auth.conf file already exists. User name variable no longer required"; fi
-      if [ ! -z "${PIAPASSWORD}" ]; then echo "$(date '+%c') WARNING: ${CONFIGDIR}/auth.conf file already exists. Password variable no longer required"; fi
+   if [ -f "${config_dir}/auth.conf" ]; then
+      if [ ! -z "${pia_user}" ]; then echo "$(date '+%c') WARNING: ${config_dir}/auth.conf file already exists. User name variable no longer required"; fi
+      if [ ! -z "${pia_password}" ]; then echo "$(date '+%c') WARNING: ${config_dir}/auth.conf file already exists. Password variable no longer required"; fi
    fi
-   if [ ! -f "${CONFIGDIR}/auth.conf" ]; then
-      echo "$(date '+%c') WARNING: Authentication file, ${CONFIGDIR}/auth.conf, does not exist - creating"
-      if [ ! -z "${PIAUSER}" ] && [ ! -z "${PIAPASSWORD}" ]; then
-         echo "$(date '+%c') Creating authentication file from PIAUSER and PIAPASSWORD variables"
-         echo "${PIAUSER}" > "${CONFIGDIR}/auth.conf"
-         echo "${PIAPASSWORD}" >> "${CONFIGDIR}/auth.conf"
-         chmod 600 "${CONFIGDIR}/auth.conf"
+   if [ ! -f "${config_dir}/auth.conf" ]; then
+      echo "$(date '+%c') WARNING: Authentication file, ${config_dir}/auth.conf, does not exist - creating"
+      if [ ! -z "${pia_user}" ] && [ ! -z "${pia_password}" ]; then
+         echo "$(date '+%c') Creating authentication file from pia_user and pia_password variables"
+         echo "${pia_user}" > "${config_dir}/auth.conf"
+         echo "${pia_password}" >> "${config_dir}/auth.conf"
+         chmod 600 "${config_dir}/auth.conf"
       else
-         if [ -z "${PIAUSER}" ]; then echo "$(date '+%c') ERROR:   PIA user name not set, connot continue"; exit 1; fi
-         if [ -z "${PIAPASSWORD}" ]; then echo "$(date '+%c') ERROR:   PIA password not set, connot continue"; exit 1; fi
+         if [ -z "${pia_user}" ]; then echo "$(date '+%c') ERROR:   PIA user name not set, connot continue"; exit 1; fi
+         if [ -z "${pia_password}" ]; then echo "$(date '+%c') ERROR:   PIA password not set, connot continue"; exit 1; fi
       fi
    fi
 }
 
 SetServerLocation(){
-   if [ -z "${CONFIGFILE}" ]; then
+   if [ -z "${pia_config_file}" ]; then
       echo "$(date '+%c') WARNING: OpenVPN configuration not set, defaulting to 'Sweden.ovpn'"
-      CONFIGFILE="Sweden.ovpn"
+      pia_config_file="Sweden.ovpn"
    else
-      echo "$(date '+%c') INFO   : OpenVPN configuration set to '${CONFIGFILE}'"
+      echo "$(date '+%c') INFO   : OpenVPN configuration set to '${pia_config_file}'"
    fi
 }
 
@@ -98,7 +98,7 @@ DeleteLoggingRules(){
 StartOpenVPN(){
 
    echo "$(date '+%c') Starting OpenVPN client"
-   openvpn --config "${APPBASE}/${CONFIGFILE}" --auth-nocache --auth-user-pass "${CONFIGDIR}/auth.conf" &
+   openvpn --config "${app_base_dir}/${pia_config_file}" --auth-nocache --auth-user-pass "${config_dir}/auth.conf" &
    while [ -z "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 1; done
    echo "$(date '+%c') OpenVPN Private Internet Access tunnel connected on IP: $(ip ad | grep tun. | grep inet | awk '{print $2}')"
 
@@ -117,44 +117,44 @@ LoadPretunnelRules(){
    iptables -I OUTPUT -o lo -j ACCEPT
 
    echo "$(date '+%c') Allow LAN ping"
-   iptables -I INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p icmp -j ACCEPT
+   iptables -I INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p icmp -j ACCEPT
 
    echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over LAN adapter"
-   iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j ACCEPT
-   iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j ACCEPT
+   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
+   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j ACCEPT
 
-   echo "$(date '+%c') Allow OpenVPN port: ${VPNPORT}"
-   iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -p udp --dport "${VPNPORT}" -j ACCEPT
-   iptables -A INPUT -i "${LANADAPTER}" -d "${LANIP}" -p udp --sport "${VPNPORT}" -j ACCEPT
+   echo "$(date '+%c') Allow OpenVPN port: ${vpn_port}"
+   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -p udp --dport "${vpn_port}" -j ACCEPT
+   iptables -A INPUT -i "${lan_adapter}" -d "${lan_ip}" -p udp --sport "${vpn_port}" -j ACCEPT
 
    echo "$(date '+%c') Allow local peer discovery on LAN"
-   iptables -A INPUT -i "${LANADAPTER}" -s "${LANIP}" -d "${BCASTADDR}" -p udp --dport 6771 -j ACCEPT
+   iptables -A INPUT -i "${lan_adapter}" -s "${lan_ip}" -d "${broadcast_address}" -p udp --dport 6771 -j ACCEPT
 
-   if [ ! -z "${SABNZBDGID}" ]; then
+   if [ ! -z "${sabnzbd_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SABnzbd"
-      iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8080 -j ACCEPT
-      iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 9090 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${SABNZBDGID}" -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8080 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${sabnzbd_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${DELUGEGID}" ]; then
+   if [ ! -z "${deluge_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Deluge"
-      iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8112 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${DELUGEGID}" -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${deluge_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${COUCHPOTATOGID}" ]; then
+   if [ ! -z "${couchpotato_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for CouchPotato"
-      iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 5050 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${COUCHPOTATOGID}" -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${couchpotato_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${SICKGEARGID}" ]; then
+   if [ ! -z "${sickgear_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SickGear"
-      iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8081 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${SICKGEARGID}" -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8081 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${sickgear_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${HEADPHONESGID}" ]; then
+   if [ ! -z "${headphones_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Headphones"
-      iptables -A INPUT -i "${LANADAPTER}" -s "${LANIPSUBNET}" -d "${LANIP}" -p tcp --dport 8181 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${HEADPHONESGID}" -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${headphones_group_id}" -j ACCEPT
    fi
 
 }
@@ -170,12 +170,12 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -d 209.222.18.218 -j ACCEPT
 
    echo "$(date '+%c') Remove rules allowing outgoing DNS traffic over the LAN adapter"
-   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j ACCEPT
-   iptables -D OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j ACCEPT
+   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
+   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j ACCEPT
 
    echo "$(date '+%c') Prevent DNS leaks by dropping outgoing DNS traffic to OpenVPN PIA servers over LAN adapter once VPN tunel is up."
-   iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.222 -j DROP
-   iptables -A OUTPUT -o "${LANADAPTER}" -s "${LANIP}" -d 209.222.18.218 -j DROP
+   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j DROP
+   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j DROP
 
    echo "$(date '+%c') Allow non-routable UPnP traffic from VPN adapter"
    iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -d 239.255.255.250 -p udp --dport 1900 -j ACCEPT
@@ -190,7 +190,7 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 80 -j ACCEPT
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 443 -j ACCEPT
 
-   if [ ! -z "${DELUGEGID}" ]; then
+   if [ ! -z "${deluge_group_id}" ]; then
       echo "$(date '+%c') Adding outgoing rules for Deluge"
       iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p tcp --dport 58800:59900 -j ACCEPT
       iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 58800:59900 -j ACCEPT
@@ -204,12 +204,12 @@ LoadPosttunnelRules(){
 
 GetLANInfo(){
 
-   LANIP="$(hostname -i)"
-   BCASTADDR="$(ip -4 a | grep "${LANIP}" | awk '{print $4}')"
-   LANIPSUBNET="$(ip -4 r | grep "${LANIP}" | grep -v via | awk '{print $1}')"
-   LANADAPTER="$(ip ad | grep eth.$ | awk '{print $7}')"
-   VPNPORT="$(grep "remote " "${APPBASE}/${CONFIGFILE}" | awk '{print $3}')"
-   echo "$(date '+%c') LAN Info: ${LANADAPTER} ${LANIP} ${LANIPSUBNET} ${BCASTADDR}"
+   lan_ip="$(hostname -i)"
+   broadcast_address="$(ip -4 a | grep "${lan_ip}" | awk '{print $4}')"
+   nginx_lan_ip_subnet="$(ip -4 r | grep "${lan_ip}" | grep -v via | awk '{print $1}')"
+   lan_adapter="$(ip ad | grep eth.$ | awk '{print $7}')"
+   vpn_port="$(grep "remote " "${app_base_dir}/${pia_config_file}" | awk '{print $3}')"
+   echo "$(date '+%c') LAN Info: ${lan_adapter} ${lan_ip} ${nginx_lan_ip_subnet} ${broadcast_address}"
 
 }
 
@@ -217,7 +217,7 @@ GetVPNInfo(){
 
    VPNIP="$(ip ad | grep tun.$ | awk '{print $2}')"
    VPNADAPTER="$(ip ad | grep tun.$ | awk '{print $7}')"
-   echo "$(date '+%c') VPN Info: ${VPNADAPTER} ${VPNIP} ${VPNPORT}"
+   echo "$(date '+%c') VPN Info: ${VPNADAPTER} ${VPNIP} ${vpn_port}"
 
 }
 

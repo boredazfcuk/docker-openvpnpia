@@ -7,13 +7,13 @@ This container is currently work in progress and will become the base container 
 
 Note: Both of the following two mandatory variables are only needed the first time the container is run. It will then save both the username and password to the file /config/auth.conf and then remove group and public permissions. Once this has been done, the container should be destroyed and recreated. This is so the password cannot be retrieved by viewing the running container's config. If you do not remove these variables, you will receive a warning each time the container is started.
 
-PIAUSER: This is the username for your Private Internet Access account
+pia_user: This is the username for your Private Internet Access account
 
-PIAPASSWORD: This is the password for the account named above
+pia_password: This is the password for the account named above
 
 ## DEFAULT VARIABLES
 
-CONFIGFILE: This is the name of the OpenVPN configuration file that you wish to use with your container. If it is not set, the container will default to using 'Sweden.ovpn'
+pia_config_file: This is the name of the OpenVPN configuration file that you wish to use with your container. If it is not set, the container will default to using 'Sweden.ovpn'
 
 ## OPTIONAL VARIABLES
 
