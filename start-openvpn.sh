@@ -10,12 +10,12 @@ CreateTunnelAdapter(){
 
 ConfigureAuthentication(){
    if [ -f "${config_dir}/auth.conf" ]; then
-      if [ ! -z "${pia_user}" ]; then echo "$(date '+%c') WARNING: ${config_dir}/auth.conf file already exists. User name variable no longer required"; fi
-      if [ ! -z "${pia_password}" ]; then echo "$(date '+%c') WARNING: ${config_dir}/auth.conf file already exists. Password variable no longer required"; fi
+      if [ "${pia_user}" ]; then echo "$(date '+%c') WARNING: ${config_dir}/auth.conf file already exists. User name variable no longer required"; fi
+      if [ "${pia_password}" ]; then echo "$(date '+%c') WARNING: ${config_dir}/auth.conf file already exists. Password variable no longer required"; fi
    fi
    if [ ! -f "${config_dir}/auth.conf" ]; then
       echo "$(date '+%c') WARNING: Authentication file, ${config_dir}/auth.conf, does not exist - creating"
-      if [ ! -z "${pia_user}" ] && [ ! -z "${pia_password}" ]; then
+      if [ "${pia_user}" ] && [ "${pia_password}" ]; then
          echo "$(date '+%c') Creating authentication file from pia_user and pia_password variables"
          echo "${pia_user}" > "${config_dir}/auth.conf"
          echo "${pia_password}" >> "${config_dir}/auth.conf"
@@ -130,28 +130,28 @@ LoadPretunnelRules(){
    echo "$(date '+%c') Allow local peer discovery on LAN"
    iptables -A INPUT -i "${lan_adapter}" -s "${lan_ip}" -d "${broadcast_address}" -p udp --dport 6771 -j ACCEPT
 
-   if [ ! -z "${sabnzbd_group_id}" ]; then
+   if [ "${sabnzbd_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SABnzbd"
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8080 -j ACCEPT
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${sabnzbd_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${deluge_group_id}" ]; then
+   if [ "${deluge_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Deluge"
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${deluge_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${couchpotato_group_id}" ]; then
+   if [ "${couchpotato_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for CouchPotato"
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${couchpotato_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${sickgear_group_id}" ]; then
+   if [ "${sickgear_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SickGear"
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8081 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${sickgear_group_id}" -j ACCEPT
    fi
-   if [ ! -z "${headphones_group_id}" ]; then
+   if [ "${headphones_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Headphones"
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${headphones_group_id}" -j ACCEPT
@@ -190,7 +190,7 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 80 -j ACCEPT
    iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 443 -j ACCEPT
 
-   if [ ! -z "${deluge_group_id}" ]; then
+   if [ "${deluge_group_id}" ]; then
       echo "$(date '+%c') Adding outgoing rules for Deluge"
       iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p tcp --dport 58800:59900 -j ACCEPT
       iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 58800:59900 -j ACCEPT
@@ -253,4 +253,4 @@ CreateLoggingRules
 StartOpenVPN
 GetVPNInfo
 LoadPosttunnelRules
-while [ ! -z "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
+while [ "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
