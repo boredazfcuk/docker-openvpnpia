@@ -141,6 +141,11 @@ LoadPretunnelRules(){
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${deluge_group_id}" -j ACCEPT
    fi
+   if [ "${qbittorrent_group_id}" ]; then
+      echo "$(date '+%c') Adding incoming and outgoing rules for qBittorrent"
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${qbittorrent_group_id}" -j ACCEPT
+   fi
    if [ "${couchpotato_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for CouchPotato"
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
@@ -196,6 +201,14 @@ LoadPosttunnelRules(){
       iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 58800:59900 -j ACCEPT
       iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p udp --dport 57700 -j ACCEPT
       iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -p udp --dport 6771 -j ACCEPT
+   fi
+
+   if [ "${qbittorrent_group_id}" ]; then
+      echo "$(date '+%c') Adding outgoing rules for qBittorrent"
+      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p tcp --dport 38800:49900 -j ACCEPT
+      iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 38800:49900 -j ACCEPT
+      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p udp --dport 37700 -j ACCEPT
+      iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -p udp --dport 4771 -j ACCEPT
    fi
 
    CreateLoggingRules
