@@ -143,7 +143,7 @@ LoadPretunnelRules(){
    fi
    if [ "${qbittorrent_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for qBittorrent"
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9091 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${qbittorrent_group_id}" -j ACCEPT
    fi
    if [ "${couchpotato_group_id}" ]; then
@@ -171,8 +171,8 @@ LoadPosttunnelRules(){
    DeleteLoggingRules
 
    echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over the VPN adapter"
-   iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -d 209.222.18.222 -j ACCEPT
-   iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -d 209.222.18.218 -j ACCEPT
+   iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d 209.222.18.222 -j ACCEPT
+   iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d 209.222.18.218 -j ACCEPT
 
    echo "$(date '+%c') Remove rules allowing outgoing DNS traffic over the LAN adapter"
    iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
@@ -183,32 +183,29 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j DROP
 
    echo "$(date '+%c') Allow non-routable UPnP traffic from VPN adapter"
-   iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -d 239.255.255.250 -p udp --dport 1900 -j ACCEPT
+   iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -d 239.255.255.250 -p udp --dport 1900 -j ACCEPT
 
    echo "$(date '+%c') Allow local peer discovery"
-   iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -d 239.192.152.143 -p udp --dport 6771 -j ACCEPT
+   iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -d 239.192.152.143 -p udp --dport 6771 -j ACCEPT
 
    echo "$(date '+%c') Disable multicast"
-   iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -d 224.0.0.0/24 -p igmp -j DROP
+   iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d 224.0.0.0/24 -p igmp -j DROP
 
    echo "$(date '+%c') Allow web traffic out"
-   iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 80 -j ACCEPT
-   iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --dport 443 -j ACCEPT
+   iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --dport 80 -j ACCEPT
+   iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --dport 443 -j ACCEPT
 
    if [ "${deluge_group_id}" ]; then
       echo "$(date '+%c') Adding outgoing rules for Deluge"
-      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p tcp --dport 58800:59900 -j ACCEPT
-      iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 58800:59900 -j ACCEPT
-      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p udp --dport 57700 -j ACCEPT
-      iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -p udp --dport 6771 -j ACCEPT
+      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 58800:59900 -j ACCEPT
+      iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --sport 58800:59900 -j ACCEPT
+      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p udp --dport 57700 -j ACCEPT
+      iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -p udp --dport 6771 -j ACCEPT
    fi
 
    if [ "${qbittorrent_group_id}" ]; then
       echo "$(date '+%c') Adding outgoing rules for qBittorrent"
-      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p tcp --dport 38800:49900 -j ACCEPT
-      iptables -A OUTPUT -o "${VPNADAPTER}" -s "${VPNIP}" -p tcp --sport 38800:49900 -j ACCEPT
-      iptables -A INPUT -i "${VPNADAPTER}" -d "${VPNIP}" -p udp --dport 37700 -j ACCEPT
-      iptables -A INPUT -i "${VPNADAPTER}" -s "${VPNIP}" -p udp --dport 4771 -j ACCEPT
+      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" --sport 1909 -j ACCEPT
    fi
 
    CreateLoggingRules
@@ -228,9 +225,9 @@ GetLANInfo(){
 
 GetVPNInfo(){
 
-   VPNIP="$(ip ad | grep tun.$ | awk '{print $2}')"
-   VPNADAPTER="$(ip ad | grep tun.$ | awk '{print $7}')"
-   echo "$(date '+%c') VPN Info: ${VPNADAPTER} ${VPNIP} ${vpn_port}"
+   vpn_ip="$(ip ad | grep tun.$ | awk '{print $2}')"
+   vpn_adapter="$(ip ad | grep tun.$ | awk '{print $7}')"
+   echo "$(date '+%c') VPN Info: ${vpn_adapter} ${vpn_ip} ${vpn_port}"
 
 }
 
