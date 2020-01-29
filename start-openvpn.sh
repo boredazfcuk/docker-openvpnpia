@@ -52,7 +52,6 @@ ConfigureLogging(){
 }
 
 CreateLoggingRules(){
-
    echo "$(date '+%c') Create logging chains"
    iptables -N LOG_IN
    iptables -N LOG_FW
@@ -70,11 +69,9 @@ CreateLoggingRules(){
    iptables -A INPUT -j LOG_IN
    iptables -A FORWARD -j LOG_FW
    iptables -A OUTPUT -j LOG_OUT
-
 }
 
 DeleteLoggingRules(){
-
    echo "$(date '+%c') Delete chain rules"
    iptables -D LOG_IN -j NFLOG --nflog-group 0 --nflog-prefix "IN DENY  : "
    iptables -D LOG_IN -j DROP
@@ -92,20 +89,16 @@ DeleteLoggingRules(){
    iptables -X LOG_IN
    iptables -X LOG_FW
    iptables -X LOG_OUT
-
 }
 
 StartOpenVPN(){
-
    echo "$(date '+%c') Starting OpenVPN client"
    openvpn --config "${app_base_dir}/${pia_config_file}" --auth-nocache --auth-user-pass "${config_dir}/auth.conf" &
    while [ -z "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 1; done
    echo "$(date '+%c') OpenVPN Private Internet Access tunnel connected on IP: $(ip ad | grep tun. | grep inet | awk '{print $2}')"
-
 }
 
 LoadPretunnelRules(){
-
    echo "$(date '+%c') Load pre-tunnel rules"
 
    echo "$(date '+%c') Allow established and related traffic"
@@ -141,11 +134,6 @@ LoadPretunnelRules(){
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${deluge_group_id}" -j ACCEPT
    fi
-   if [ "${qbittorrent_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for qBittorrent"
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9091 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${qbittorrent_group_id}" -j ACCEPT
-   fi
    if [ "${couchpotato_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for CouchPotato"
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
@@ -161,11 +149,9 @@ LoadPretunnelRules(){
       iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${headphones_group_id}" -j ACCEPT
    fi
-
 }
 
 LoadPosttunnelRules(){
-
    echo "$(date '+%c') Load post-tunnel rules"
 
    DeleteLoggingRules
@@ -203,50 +189,36 @@ LoadPosttunnelRules(){
       iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -p udp --dport 6771 -j ACCEPT
    fi
 
-   if [ "${qbittorrent_group_id}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for qBittorrent"
-      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" --sport 1909 -j ACCEPT
-   fi
-
    CreateLoggingRules
-
 }
 
 GetLANInfo(){
-
    lan_ip="$(hostname -i)"
    broadcast_address="$(ip -4 a | grep "${lan_ip}" | awk '{print $4}')"
    nginx_lan_ip_subnet="$(ip -4 r | grep "${lan_ip}" | grep -v via | awk '{print $1}')"
    lan_adapter="$(ip ad | grep eth.$ | awk '{print $7}')"
    vpn_port="$(grep "remote " "${app_base_dir}/${pia_config_file}" | awk '{print $3}')"
    echo "$(date '+%c') LAN Info: ${lan_adapter} ${lan_ip} ${nginx_lan_ip_subnet} ${broadcast_address}"
-
 }
 
 GetVPNInfo(){
-
    vpn_ip="$(ip ad | grep tun.$ | awk '{print $2}')"
    vpn_adapter="$(ip ad | grep tun.$ | awk '{print $7}')"
    echo "$(date '+%c') VPN Info: ${vpn_adapter} ${vpn_ip} ${vpn_port}"
-
 }
 
 ClearAllRules(){
-
    echo "$(date '+%c') Clear iptables configuration"
    conntrack -F >/dev/null 2>&1
    iptables -F
    iptables -X
-
 }
 
 SetDefaultPolicies(){
-
    echo "$(date '+%c') Set default policies"
    iptables -P INPUT ACCEPT
    iptables -P FORWARD ACCEPT
    iptables -P OUTPUT ACCEPT
-
 }
 
 echo -e "\n"
@@ -263,4 +235,5 @@ CreateLoggingRules
 StartOpenVPN
 GetVPNInfo
 LoadPosttunnelRules
+echo "$(date '+%c') ***** Startup of OpenVPN Private Internet Access container complete *****"
 while [ "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
