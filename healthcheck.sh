@@ -1,14 +1,18 @@
 #!/bin/ash
 
-tunnel_adapter_count="$(ip -4 a | grep -c tun.$)"
-tunnel_adapter_ip="$(ip a | grep tun.$ | awk '{print $2}')"
+tunnel_adapter_count="$(ip -4 addr | grep -c tun.$)"
 
 if [ "${tunnel_adapter_count}" -ne 1 ]; then
-   echo "Tunnel adapter fault"
-   exit 1
-elif [ $(traceroute -m 1 "${tunnel_adapter_ip}" | grep -c "${tunnel_adapter_ip}") -ne 2 ]; then
-   echo "Incorrect route"
+   echo "Tunnel does not exist"
    exit 1
 fi
-echo "Tunnel adapter and routing OK"
+
+tunnel_adapter="$(ip addr | grep tun.$ | awk '{print $7}')"
+tunnel_adapter_ip="$(ip addr | grep tun.$ | awk '{print $2}')"
+tunnel_default_gateway="$(route | grep tun.$ | grep default | awk '{print $2}')"
+if [ "$(traceroute -m1 -i "${tunnel_adapter}" -s "${tunnel_adapter_ip}" -w 1 "${tunnel_default_gateway}" | grep -c "ms")" -ne 1 ]; then
+   echo "Cannot contact default gateway. Tunnel down"
+   exit 1
+fi
+echo "Tunnel adapter present and default gateway responding"
 exit 0

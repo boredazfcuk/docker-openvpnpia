@@ -181,6 +181,9 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --dport 80 -j ACCEPT
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --dport 443 -j ACCEPT
 
+   echo "$(date '+%c') Allow traceroute traffic from VPN IP to VPN default gateway out via VPN adapter"
+   iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d "${vpn_default_gateway}" -p udp --dport 33434:33534 -j ACCEPT
+
    if [ "${deluge_group_id}" ]; then
       echo "$(date '+%c') Adding outgoing rules for Deluge"
       iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 58800:59900 -j ACCEPT
@@ -202,8 +205,9 @@ GetLANInfo(){
 }
 
 GetVPNInfo(){
-   vpn_ip="$(ip ad | grep tun.$ | awk '{print $2}')"
-   vpn_adapter="$(ip ad | grep tun.$ | awk '{print $7}')"
+   vpn_ip="$(ip addr | grep tun.$ | awk '{print $2}')"
+   vpn_adapter="$(ip addr | grep tun.$ | awk '{print $7}')"
+   vpn_default_gateway="$(route | grep tun.$ | grep default | awk '{print $2}')"
    echo "$(date '+%c') VPN Info: ${vpn_adapter} ${vpn_ip} ${vpn_port}"
 }
 
