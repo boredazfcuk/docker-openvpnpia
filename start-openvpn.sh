@@ -1,5 +1,11 @@
 #!/bin/ash
 
+Initialise(){
+echo -e "\n"
+echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
+echo "$(date '+%c') $(cat /etc/*-release | grep "PRETTY_NAME" | sed 's/PRETTY_NAME=//g' | sed 's/"//g')"
+}
+
 CreateTunnelAdapter(){
    if [ ! -d "/dev/net" ]; then echo "$(date '+%c') Creating network device classification in /dev"; mkdir /dev/net; fi
    if [ ! -c "/dev/net/tun" ]; then
@@ -236,8 +242,7 @@ SetDefaultPolicies(){
    iptables -P OUTPUT ACCEPT
 }
 
-echo -e "\n"
-echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
+Initialise
 CreateTunnelAdapter
 ConfigureAuthentication
 SetServerLocation
