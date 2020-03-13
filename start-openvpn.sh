@@ -94,7 +94,7 @@ DeleteLoggingRules(){
 StartOpenVPN(){
    echo "$(date '+%c') Starting OpenVPN client"
    openvpn --config "${app_base_dir}/${pia_config_file}" --auth-nocache --auth-user-pass "${config_dir}/auth.conf" &
-   while [ -z "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 1; done
+   while [ -z "$(ip addr | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 1; done
    echo "$(date '+%c') OpenVPN Private Internet Access tunnel connected on IP: $(ip ad | grep tun. | grep inet | awk '{print $2}')"
 }
 
@@ -110,7 +110,8 @@ LoadPretunnelRules(){
    iptables -I OUTPUT -o lo -j ACCEPT
 
    echo "$(date '+%c') Allow LAN ping"
-   iptables -I INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p icmp -j ACCEPT
+   iptables -I INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p icmp -j ACCEPT
+   iptables -I INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p icmp -j ACCEPT
 
    echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over LAN adapter"
    iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
@@ -125,28 +126,34 @@ LoadPretunnelRules(){
 
    if [ "${sabnzbd_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SABnzbd"
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8080 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8080 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8080 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${sabnzbd_group_id}" -j ACCEPT
    fi
    if [ "${deluge_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Deluge"
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${deluge_group_id}" -j ACCEPT
    fi
    if [ "${couchpotato_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for CouchPotato"
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${couchpotato_group_id}" -j ACCEPT
    fi
    if [ "${sickgear_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SickGear"
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8081 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8081 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8081 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${sickgear_group_id}" -j ACCEPT
    fi
    if [ "${headphones_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Headphones"
-      iptables -A INPUT -i "${lan_adapter}" -s "${nginx_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${headphones_group_id}" -j ACCEPT
    fi
 }
@@ -197,11 +204,15 @@ LoadPosttunnelRules(){
 
 GetLANInfo(){
    lan_ip="$(hostname -i)"
-   broadcast_address="$(ip -4 a | grep "${lan_ip}" | awk '{print $4}')"
-   nginx_lan_ip_subnet="$(ip -4 r | grep "${lan_ip}" | grep -v via | awk '{print $1}')"
-   lan_adapter="$(ip ad | grep eth.$ | awk '{print $7}')"
+   broadcast_address="$(ip -4 addr | grep "${lan_ip}" | awk '{print $4}')"
+   docker_lan_ip_subnet="$(ip -4 route | grep "${lan_ip}" | grep -v via | awk '{print $1}')"
+   lan_adapter="$(ip addr | grep eth.$ | awk '{print $7}')"
    vpn_port="$(grep "remote " "${app_base_dir}/${pia_config_file}" | awk '{print $3}')"
-   echo "$(date '+%c') LAN Info: ${lan_adapter} ${lan_ip} ${nginx_lan_ip_subnet} ${broadcast_address}"
+   echo "$(date '+%c') LAN Adapter: ${lan_adapter}"
+   echo "$(date '+%c') LAN IP Address: ${lan_ip}"
+   echo "$(date '+%c') Host network: ${host_lan_ip_subnet}"
+   echo "$(date '+%c') Docker network: ${docker_lan_ip_subnet}"
+   echo "$(date '+%c') Docker network broadcast address: ${broadcast_address}"
 }
 
 GetVPNInfo(){
@@ -240,4 +251,4 @@ StartOpenVPN
 GetVPNInfo
 LoadPosttunnelRules
 echo "$(date '+%c') ***** Startup of OpenVPN Private Internet Access container complete *****"
-while [ "$(ip ad | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
+while [ "$(ip addr | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
