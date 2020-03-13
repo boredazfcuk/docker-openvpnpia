@@ -1,3 +1,7 @@
+20200313
+
+ - Change: Log now displays OS version
+
 20200229
 
  - Change: Add rule for healthcheck tracertoute as it was unrecognised outgoing traffic... i.e allowed, but logged. This was spamming logs, so it's now specifically allowed to avoid this.
