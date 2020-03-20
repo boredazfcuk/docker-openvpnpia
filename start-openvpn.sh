@@ -1,7 +1,7 @@
 #!/bin/ash
 
 Initialise(){
-echo -e "\n"
+echo
 echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
 echo "$(date '+%c') $(cat /etc/*-release | grep "PRETTY_NAME" | sed 's/PRETTY_NAME=//g' | sed 's/"//g')"
 }
