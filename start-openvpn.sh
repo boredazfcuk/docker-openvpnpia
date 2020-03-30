@@ -1,5 +1,7 @@
 #!/bin/ash
 
+set -e
+
 Initialise(){
 echo
 echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
