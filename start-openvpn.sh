@@ -200,11 +200,16 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d "${vpn_default_gateway}" -p udp --dport 33434:33534 -j ACCEPT
 
    if [ "${deluge_group_id}" ]; then
-      echo "$(date '+%c') Adding outgoing rules for Deluge"
-      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 58800:59900 -j ACCEPT
-      iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --sport 58800:59900 -j ACCEPT
+      echo "$(date '+%c') Reroute incoming TCP and UDP forwarded port ${forwarded_port} to port 6771 for Deluge"
+      iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
+      iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
+      echo "$(date '+%c') Adding incoming rules for Deluge"
+      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 57700 -j ACCEPT
       iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p udp --dport 57700 -j ACCEPT
       iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -p udp --dport 6771 -j ACCEPT
+      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 58800:59900 -j ACCEPT
+      echo "$(date '+%c') Adding outgoing rules for Deluge"
+      iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --sport 58800:59900 -j ACCEPT
    fi
 
    CreateLoggingRules
@@ -228,6 +233,32 @@ GetVPNInfo(){
    vpn_adapter="$(ip addr | grep tun.$ | awk '{print $7}')"
    vpn_default_gateway="$(route | grep tun.$ | grep default | awk '{print $2}')"
    echo "$(date '+%c') VPN Info: ${vpn_adapter} ${vpn_ip} ${vpn_port}"
+}
+
+CheckPortForwardingServer(){
+   case "${pia_config_file/.ovpn/}" in
+      "CA Toronto"|"CA Montreal"|"CA Vancouver"|"Czech Republic"|"DE Berlin"|"DE Frankfurt"|France|Israel|Romania|Spain|Switzerland|Sweden)
+         port_forward_capable="True"
+         echo "$(date '+%c') ${pia_config_file/.ovpn/} server is capable of port forwarding."
+         ;;
+      *)
+         echo "$(date '+%c') ${pia_config_file/.ovpn/} server is not capable of port forwarding. To enable port forwarding, please select on of the following VPN server profiles: CA Toronto, CA Montreal, CA Vancouver, Czech Republic, DE Berlin, DE Frankfurt, France, Israel, Romania, Spain, Switzerland or Sweden"
+   esac
+}   
+
+GetPortForwardingPort(){
+   if [ "${port_forward_capable}" = "True" ]; then
+      echo "$(date '+%c') Loading port forward assignment information..."
+      client_id="$(head -n 100 /dev/urandom | sha256sum | tr -d " -")"
+      echo "$(date '+%c') Client ID: ${client_id}"
+      forwarded_port="$(wget -O- --tries=3 "http://209.222.18.222:2000/?client_id=$client_id" 2>/dev/null)"
+      if [ -z "${forwarded_port}" ]; then
+         echo "$(date '+%c') Port forwarding is already activated on this connection, has expired, or you are not connected to a PIA region that supports port forwarding"
+      else
+         forwarded_port="${forwarded_port//[^0-9]/}"
+         echo "$(date '+%c') Port to use for port forwarding: ${forwarded_port}"
+      fi
+   fi
 }
 
 ClearAllRules(){
@@ -256,6 +287,8 @@ LoadPretunnelRules
 CreateLoggingRules
 StartOpenVPN
 GetVPNInfo
+CheckPortForwardingServer
+GetPortForwardingPort
 LoadPosttunnelRules
 echo "$(date '+%c') ***** Startup of OpenVPN Private Internet Access container complete *****"
 while [ "$(ip addr | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
