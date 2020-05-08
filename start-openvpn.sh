@@ -134,9 +134,7 @@ LoadPretunnelRules(){
 
    if [ "${sabnzbd_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for SABnzbd"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8080 -j ACCEPT
       iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8080 -j ACCEPT
       iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${sabnzbd_group_id}" -j ACCEPT
    fi
@@ -164,12 +162,16 @@ LoadPretunnelRules(){
       iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${headphones_group_id}" -j ACCEPT
    fi
+   if [ "${airsonic_group_id}" ]; then
+      echo "$(date '+%c') Adding incoming and outgoing rules for Airsonic"
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 4040 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 4040 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${sabnzbd_group_id}" -j ACCEPT
+   fi
    if [ "${jellyfin_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Jellyfin"
       iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8096 -j ACCEPT
       iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8096 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8920 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8920 -j ACCEPT
       iptables -A OUTPUT -m owner --gid-owner "${jellyfin_group_id}" -j ACCEPT
    fi
 }
