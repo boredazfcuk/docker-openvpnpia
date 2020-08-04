@@ -25,7 +25,7 @@ ConfigureAuthentication(){
       echo "$(date '+%c') WARNING: Authentication file, ${config_dir}/auth.conf, does not exist - creating"
       if [ "${pia_user}" ] && [ "${pia_password}" ]; then
          echo "$(date '+%c') Creating authentication file from pia_user and pia_password variables"
-         echo "${pia_user}" > "${config_dir}/auth.conf"
+         echo "${pia_user}" > "/auth.conf"
          echo "${pia_password}" >> "${config_dir}/auth.conf"
          chmod 600 "${config_dir}/auth.conf"
       else
@@ -45,7 +45,7 @@ SetServerLocation(){
 }
 
 ConfigureLogging(){
-   echo "$(date '+%c') Logging to /var/log/iptables.log"
+   echo "$(date '+%c') Logging to ${config_dir}/log/iptables.log"
    sed -i -e "s%^#plugin=\"/usr/lib/ulogd/ulogd_inppkt_NFLOG.so\"%plugin=\"/usr/lib/ulogd/ulogd_inppkt_NFLOG.so\"%" \
       -e "s%^#plugin=\"/usr/lib/ulogd/ulogd_raw2packet_BASE.so\"%plugin=\"/usr/lib/ulogd/ulogd_raw2packet_BASE.so\"%" \
       -e "s%^#plugin=\"/usr/lib/ulogd/ulogd_filter_IFINDEX.so\"%plugin=\"/usr/lib/ulogd/ulogd_filter_IFINDEX.so\"%" \
@@ -54,9 +54,10 @@ ConfigureLogging(){
       -e "s%^#plugin=\"/usr/lib/ulogd/ulogd_output_LOGEMU.so\"%plugin=\"/usr/lib/ulogd/ulogd_output_LOGEMU.so\"%" \
       -e 's/^#stack=log1:NFLOG,base1/stack=log1:NFLOG,base1/' \
       -e 's/ulogd_syslogemu.log/iptables.log/' /etc/ulogd.conf
-   if [ ! -f /var/log/iptables.log ]; then touch /var/log/iptables.log; fi
+   if [ ! -d "${config_dir}/log" ]; then mkdir -p "${config_dir}/log"; fi
+   if [ ! -f "${config_dir}/log/iptables.log" ]; then touch "${config_dir}/log/iptables.log"; fi
    /usr/sbin/ulogd &
-   tail -Fn0 /var/log/iptables.log &
+   tail -Fn0 "${config_dir}/log/iptables.log" &
 }
 
 CreateLoggingRules(){
@@ -166,7 +167,15 @@ LoadPretunnelRules(){
       echo "$(date '+%c') Adding incoming and outgoing rules for Airsonic"
       iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 4040 -j ACCEPT
       iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 4040 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${sabnzbd_group_id}" -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${airsonic_group_id}" -j ACCEPT
+   fi
+   if [ "${subsonic_group_id}" ]; then
+      echo "$(date '+%c') Adding incoming and outgoing rules for Subsonic"
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3030 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3030 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3131 -j ACCEPT
+      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3131 -j ACCEPT
+      iptables -A OUTPUT -m owner --gid-owner "${subsonic_group_id}" -j ACCEPT
    fi
    if [ "${jellyfin_group_id}" ]; then
       echo "$(date '+%c') Adding incoming and outgoing rules for Jellyfin"

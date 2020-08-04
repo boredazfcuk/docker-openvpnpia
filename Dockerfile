@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.12
 MAINTAINER boredazfcuk
 ARG build_dependencies="curl unzip"
 ARG app_dependencies="openvpn conntrack-tools ulogd"
