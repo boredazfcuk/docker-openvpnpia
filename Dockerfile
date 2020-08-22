@@ -5,7 +5,6 @@ ARG app_dependencies="openvpn conntrack-tools ulogd"
 ENV config_dir="/config" \
   app_base_dir="/OpenVPNPIA"
 
-
 RUN echo "$(date '+%d/%m/%Y - %H:%M:%S') | ***** BUILD STARTED *****" && \
    echo "$(date '+%d/%m/%Y - %H:%M:%S') | Create application directory" && \
    mkdir -p "${app_base_dir}" && \

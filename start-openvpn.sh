@@ -1,7 +1,5 @@
 #!/bin/ash
 
-set -e
-
 Initialise(){
 echo
 echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
@@ -56,8 +54,12 @@ ConfigureLogging(){
       -e 's/ulogd_syslogemu.log/iptables.log/' /etc/ulogd.conf
    if [ ! -d "${config_dir}/log" ]; then mkdir -p "${config_dir}/log"; fi
    if [ ! -f "${config_dir}/log/iptables.log" ]; then touch "${config_dir}/log/iptables.log"; fi
+   if [ -f "/var/log/iptables.log" ]; then rm "/var/log/iptables.log"; fi
+   if [ ! -L "/var/log/iptables.log" ]; then ln -s "${config_dir}/log/iptables.log" "/var/log/iptables.log"; fi
    /usr/sbin/ulogd &
-   tail -Fn0 "${config_dir}/log/iptables.log" &
+   if [ "${follow_iptables_log}" ]; then
+      tail -Fn0 "${config_dir}/log/iptables.log" &
+   fi
 }
 
 CreateLoggingRules(){
@@ -194,13 +196,14 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d 209.222.18.222 -j ACCEPT
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d 209.222.18.218 -j ACCEPT
 
-   echo "$(date '+%c') Remove rules allowing outgoing DNS traffic over the LAN adapter"
-   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
-   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j ACCEPT
+# Removed due to docker compose dns: bug that prevents using non-internal DNS
+#   echo "$(date '+%c') Remove rules allowing outgoing DNS traffic over the LAN adapter"
+#   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
+#   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j ACCEPT
 
-   echo "$(date '+%c') Prevent DNS leaks by dropping outgoing DNS traffic to OpenVPN PIA servers over LAN adapter once VPN tunel is up."
-   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j DROP
-   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j DROP
+#   echo "$(date '+%c') Prevent DNS leaks by dropping outgoing DNS traffic to OpenVPN PIA servers over LAN adapter once VPN tunel is up."
+#   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j DROP
+#   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j DROP
 
    echo "$(date '+%c') Allow non-routable UPnP traffic from VPN adapter"
    iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -d 239.255.255.250 -p udp --dport 1900 -j ACCEPT
@@ -219,9 +222,11 @@ LoadPosttunnelRules(){
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d "${vpn_default_gateway}" -p udp --dport 33434:33534 -j ACCEPT
 
    if [ "${deluge_group_id}" ]; then
-      echo "$(date '+%c') Reroute incoming TCP and UDP forwarded port ${forwarded_port} to port 6771 for Deluge"
-      iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
-      iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
+      if [ "${forwarded_port}" ]; then
+         echo "$(date '+%c') Reroute incoming TCP and UDP forwarded port ${forwarded_port} to port 6771 for Deluge"
+         iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
+         iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
+      fi
       echo "$(date '+%c') Adding incoming rules for Deluge"
       iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 57700 -j ACCEPT
       iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p udp --dport 57700 -j ACCEPT
@@ -272,7 +277,7 @@ GetPortForwardingPort(){
       echo "$(date '+%c') Client ID: ${client_id}"
       forwarded_port="$(wget -O- --tries=3 "http://209.222.18.222:2000/?client_id=$client_id" 2>/dev/null)"
       if [ -z "${forwarded_port}" ]; then
-         echo "$(date '+%c') Port forwarding is already activated on this connection, has expired, or you are not connected to a PIA region that supports port forwarding"
+         echo "$(date '+%c') ERROR: Port forwarding is already activated on this connection, has expired, you are not connected to a PIA region that supports port forwarding, or the remote server is down"
       else
          forwarded_port="${forwarded_port//[^0-9]/}"
          echo "$(date '+%c') Port to use for port forwarding: ${forwarded_port}"
@@ -311,3 +316,4 @@ GetPortForwardingPort
 LoadPosttunnelRules
 echo "$(date '+%c') ***** Startup of OpenVPN Private Internet Access container complete *****"
 while [ "$(ip addr | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 120; done
+echo "$(date '+%c') ***** Connection dropped. Restarting container *****"
