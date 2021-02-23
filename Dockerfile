@@ -1,5 +1,8 @@
 FROM alpine:3.12
 MAINTAINER boredazfcuk
+
+# Container version serves no real purpose. Increment to force a container rebuild.
+ARG container_version="1.0.2"
 ARG build_dependencies="curl unzip"
 ARG app_dependencies="openvpn conntrack-tools ulogd"
 ENV config_dir="/config" \
@@ -13,8 +16,8 @@ echo "$(date '+%d/%m/%Y - %H:%M:%S') | Install build dependencies" && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Install dependencies" && \
    apk add --no-cache --no-progress ${app_dependencies} && \
    temp_dir="$(mktemp -d)" && \
-   curl -sSL "https://www.privateinternetaccess.com/openvpn/openvpn-strong.zip" -o "${temp_dir}/openvpn-strong.zip" && \
-   unzip "${temp_dir}/openvpn-strong.zip" -d "${app_base_dir}" && \
+   curl -sSL "https://www.privateinternetaccess.com/openvpn/openvpn-strong-nextgen.zip" -o "${temp_dir}/openvpn-strong-nextgen.zip" && \
+   unzip "${temp_dir}/openvpn-strong-nextgen.zip" -d "${app_base_dir}" && \
 echo "$(date '+%d/%m/%Y - %H:%M:%S') | Clean up" && \
    rm -r "${temp_dir}" && \
    apk del --no-progress --purge build-deps

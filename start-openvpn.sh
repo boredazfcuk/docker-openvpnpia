@@ -1,9 +1,9 @@
 #!/bin/ash
 
 Initialise(){
-echo
-echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
-echo "$(date '+%c') $(cat /etc/*-release | grep "PRETTY_NAME" | sed 's/PRETTY_NAME=//g' | sed 's/"//g')"
+   echo
+   echo "$(date '+%c') ***** Starting OpenVPN Private Internet Access container *****"
+   echo "$(date '+%c') $(cat /etc/*-release | grep "PRETTY_NAME" | sed 's/PRETTY_NAME=//g' | sed 's/"//g')"
 }
 
 CreateTunnelAdapter(){
@@ -69,11 +69,13 @@ CreateLoggingRules(){
    iptables -N LOG_OUT
 
    echo "$(date '+%c') Create chain rules"
-   iptables -A LOG_IN -j NFLOG --nflog-group 0 --nflog-prefix "IN DENY  : "
-   iptables -A LOG_IN -j DROP
-   iptables -A LOG_FW -j NFLOG --nflog-group 0 --nflog-prefix "FW DENY  : "
-   iptables -A LOG_FW -j DROP
-   iptables -A LOG_OUT -j NFLOG --nflog-group 0 --nflog-prefix "OUT ALLOW: "
+   iptables -A LOG_IN -j NFLOG --nflog-group 0 --nflog-prefix "IN DENY   : "
+   iptables -A LOG_IN -j ACCEPT
+   # iptables -A LOG_IN -j DROP
+   iptables -A LOG_FW -j NFLOG --nflog-group 0 --nflog-prefix "FW DENY   : "
+   iptables -A LOG_FW -j ACCEPT
+   # iptables -A LOG_FW -j DROP
+   iptables -A LOG_OUT -j NFLOG --nflog-group 0 --nflog-prefix "OUT ALLOW : "
    iptables -A LOG_OUT -j ACCEPT
 
    echo "$(date '+%c') Enable chains"
@@ -84,11 +86,13 @@ CreateLoggingRules(){
 
 DeleteLoggingRules(){
    echo "$(date '+%c') Delete chain rules"
-   iptables -D LOG_IN -j NFLOG --nflog-group 0 --nflog-prefix "IN DENY  : "
-   iptables -D LOG_IN -j DROP
-   iptables -D LOG_FW -j NFLOG --nflog-group 0 --nflog-prefix "FW DENY  : "
-   iptables -D LOG_FW -j DROP
-   iptables -D LOG_OUT -j NFLOG --nflog-group 0 --nflog-prefix "OUT ALLOW: "
+   iptables -D LOG_IN -j NFLOG --nflog-group 0 --nflog-prefix "IN DENY   : "
+   iptables -D LOG_IN -j ACCEPT
+   # iptables -D LOG_IN -j DROP
+   iptables -D LOG_FW -j NFLOG --nflog-group 0 --nflog-prefix "FW DENY   : "
+   iptables -D LOG_FW -j ACCEPT
+   # iptables -D LOG_FW -j DROP
+   iptables -D LOG_OUT -j NFLOG --nflog-group 0 --nflog-prefix "OUT ALLOW : "
    iptables -D LOG_OUT -j ACCEPT
 
    echo "$(date '+%c') Delete chain references"
@@ -103,8 +107,12 @@ DeleteLoggingRules(){
 }
 
 StartOpenVPN(){
+   default_gateway="$(ip route | grep "^default" | awk '{print $3}')"
+   echo "$(date '+%c') Default gateway: ${default_gateway}"
+   echo "$(date '+%c') Create additional route to Docker host network ${host_lan_ip_subnet} via ${default_gateway}"
+   ip route add "${host_lan_ip_subnet}" via "${default_gateway}"
    echo "$(date '+%c') Starting OpenVPN client"
-   openvpn --config "${app_base_dir}/${pia_config_file}" --auth-nocache --auth-user-pass "${config_dir}/auth.conf" &
+   openvpn --config "${app_base_dir}/${pia_config_file}" --auth-nocache --auth-user-pass "${config_dir}/auth.conf" --mute-replay-warnings &
    while [ -z "$(ip addr | grep tun. | grep inet | awk '{print $2}')" ]; do sleep 1; done
    echo "$(date '+%c') OpenVPN Private Internet Access tunnel connected on IP: $(ip ad | grep tun. | grep inet | awk '{print $2}')"
 }
@@ -114,7 +122,8 @@ LoadPretunnelRules(){
 
    echo "$(date '+%c') Allow established and related traffic"
    iptables -I INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-   iptables -I OUTPUT -m state --state ESTABLISHED,RELATED  -j ACCEPT
+   iptables -I FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
+   iptables -I OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 
    echo "$(date '+%c') Allow loopback traffic"
    iptables -I INPUT -i lo -j ACCEPT
@@ -124,67 +133,13 @@ LoadPretunnelRules(){
    iptables -I INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p icmp -j ACCEPT
    iptables -I INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p icmp -j ACCEPT
 
-   echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over LAN adapter"
-   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
-   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j ACCEPT
+   echo "$(date '+%c') Allow outgoing DNS traffic to host network over LAN adapter"
+   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d "${host_lan_ip_subnet}" -p udp --dport 53 -j ACCEPT
+   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d "${host_lan_ip_subnet}" -p tcp --dport 53 -j ACCEPT
 
    echo "$(date '+%c') Allow OpenVPN port: ${vpn_port}"
    iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -p udp --dport "${vpn_port}" -j ACCEPT
    iptables -A INPUT -i "${lan_adapter}" -d "${lan_ip}" -p udp --sport "${vpn_port}" -j ACCEPT
-
-   echo "$(date '+%c') Allow local peer discovery on LAN"
-   iptables -A INPUT -i "${lan_adapter}" -s "${lan_ip}" -d "${broadcast_address}" -p udp --dport 6771 -j ACCEPT
-
-   if [ "${sabnzbd_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for SABnzbd"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 9090 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${sabnzbd_group_id}" -j ACCEPT
-   fi
-   if [ "${deluge_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for Deluge"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8112 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${deluge_group_id}" -j ACCEPT
-   fi
-   if [ "${couchpotato_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for CouchPotato"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 5050 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${couchpotato_group_id}" -j ACCEPT
-   fi
-   if [ "${sickgear_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for SickGear"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8081 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8081 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${sickgear_group_id}" -j ACCEPT
-   fi
-   if [ "${headphones_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for Headphones"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8181 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${headphones_group_id}" -j ACCEPT
-   fi
-   if [ "${airsonic_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for Airsonic"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 4040 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 4040 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${airsonic_group_id}" -j ACCEPT
-   fi
-   if [ "${subsonic_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for Subsonic"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3030 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3030 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3131 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 3131 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${subsonic_group_id}" -j ACCEPT
-   fi
-   if [ "${jellyfin_group_id}" ]; then
-      echo "$(date '+%c') Adding incoming and outgoing rules for Jellyfin"
-      iptables -A INPUT -i "${lan_adapter}" -s "${docker_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8096 -j ACCEPT
-      iptables -A INPUT -i "${lan_adapter}" -s "${host_lan_ip_subnet}" -d "${lan_ip}" -p tcp --dport 8096 -j ACCEPT
-      iptables -A OUTPUT -m owner --gid-owner "${jellyfin_group_id}" -j ACCEPT
-   fi
 }
 
 LoadPosttunnelRules(){
@@ -192,18 +147,33 @@ LoadPosttunnelRules(){
 
    DeleteLoggingRules
 
+   echo "$(date '+%c') Allow ping from Docker LAN subnet to be forwarded from LAN to VPN"
+   iptables -I FORWARD -i "${lan_adapter}" -o "${vpn_adapter}" -s "${docker_lan_ip_subnet}" -p icmp -j ACCEPT
+
+   echo "$(date '+%c') Allow pong to Docker LAN subnet to be forwarded from VPN to LAN"
+   iptables -I FORWARD -i "${vpn_adapter}" -o "${lan_adapter}" -d "${docker_lan_ip_subnet}" -p icmp -j ACCEPT
+
+   echo "$(date '+%c') Allow DNS requests from Docker LAN subnet to be forwarded from LAN to VPN"
+   iptables -I FORWARD -i "${lan_adapter}" -o "${vpn_adapter}" -s "${docker_lan_ip_subnet}" -p udp --dport 53 -j ACCEPT
+
+   echo "$(date '+%c') Allow DNS replies to Docker LAN subnet to be forwarded from VPN to LAN"
+   iptables -I FORWARD -i "${vpn_adapter}" -o "${lan_adapter}" -d "${docker_lan_ip_subnet}" -p udp --sport 53 -j ACCEPT
+
+   echo "$(date '+%c') Allow HTTP requests from Docker LAN subnet to be forwarded from LAN to VPN"
+   iptables -I FORWARD -i "${lan_adapter}" -o "${vpn_adapter}" -s "${docker_lan_ip_subnet}" -p tcp --dport 80 -j ACCEPT
+
+   echo "$(date '+%c') Allow HTTP replies to Docker LAN subnet to be forwarded from VPN to LAN"
+   iptables -I FORWARD -i "${vpn_adapter}" -o "${lan_adapter}" -d "${docker_lan_ip_subnet}" -p tcp --sport 80 -j ACCEPT
+
+   echo "$(date '+%c') Allow HTTPS requests from Docker LAN subnet to be forwarded from LAN to VPN"
+   iptables -I FORWARD -i "${lan_adapter}" -o "${vpn_adapter}" -s "${docker_lan_ip_subnet}" -p tcp --dport 443 -j ACCEPT
+
+   echo "$(date '+%c') Allow HTTPS replies to Docker LAN subnet to be forwarded from VPN to LAN"
+   iptables -I FORWARD -i "${vpn_adapter}" -o "${lan_adapter}" -d "${docker_lan_ip_subnet}" -p tcp --sport 443 -j ACCEPT
+
    echo "$(date '+%c') Allow outgoing DNS traffic to OpenVPN PIA servers over the VPN adapter"
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d 209.222.18.222 -j ACCEPT
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d 209.222.18.218 -j ACCEPT
-
-# Removed due to docker compose dns: bug that prevents using non-internal DNS
-#   echo "$(date '+%c') Remove rules allowing outgoing DNS traffic over the LAN adapter"
-#   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j ACCEPT
-#   iptables -D OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j ACCEPT
-
-#   echo "$(date '+%c') Prevent DNS leaks by dropping outgoing DNS traffic to OpenVPN PIA servers over LAN adapter once VPN tunel is up."
-#   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.222 -j DROP
-#   iptables -A OUTPUT -o "${lan_adapter}" -s "${lan_ip}" -d 209.222.18.218 -j DROP
 
    echo "$(date '+%c') Allow non-routable UPnP traffic from VPN adapter"
    iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -d 239.255.255.250 -p udp --dport 1900 -j ACCEPT
@@ -221,42 +191,41 @@ LoadPosttunnelRules(){
    echo "$(date '+%c') Allow traceroute traffic from VPN IP to VPN default gateway out via VPN adapter"
    iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -d "${vpn_default_gateway}" -p udp --dport 33434:33534 -j ACCEPT
 
-   if [ "${deluge_group_id}" ]; then
-      if [ "${forwarded_port}" ]; then
-         echo "$(date '+%c') Reroute incoming TCP and UDP forwarded port ${forwarded_port} to port 6771 for Deluge"
-         iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
-         iptables -t nat -A PREROUTING -i "${vpn_adapter}" -p tcp --dport "${forwarded_port}" -j REDIRECT --to-port 57700
-      fi
-      echo "$(date '+%c') Adding incoming rules for Deluge"
-      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 57700 -j ACCEPT
-      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p udp --dport 57700 -j ACCEPT
-      iptables -A INPUT -i "${vpn_adapter}" -s "${vpn_ip}" -p udp --dport 6771 -j ACCEPT
-      iptables -A INPUT -i "${vpn_adapter}" -d "${vpn_ip}" -p tcp --dport 58800:59900 -j ACCEPT
-      echo "$(date '+%c') Adding outgoing rules for Deluge"
-      iptables -A OUTPUT -o "${vpn_adapter}" -s "${vpn_ip}" -p tcp --sport 58800:59900 -j ACCEPT
-   fi
+   echo "$(date '+%c') Allow outgoing requests from Docker LAN subnet to be forwarded from LAN to VPN"
+   iptables -I INPUT -i "${lan_adapter}" -d "${lan_ip}" -p udp -j ACCEPT
+   iptables -I FORWARD -i "${lan_adapter}" -o "${vpn_adapter}" -s "${docker_lan_ip_subnet}" -p udp --sport 57700 -j ACCEPT
+   iptables -I FORWARD -i "${vpn_adapter}" -o "${lan_adapter}" -d "${docker_lan_ip_subnet}" -p udp --sport 6881 --dport 57700 -j ACCEPT
+   iptables -I FORWARD -i "${lan_adapter}" -o "${lan_adapter}" -s "${docker_lan_ip_subnet}" -p udp --sport 57700 --dport 57700 -j ACCEPT
+   iptables -I FORWARD -i "${lan_adapter}" -o "${lan_adapter}" -s "${docker_lan_ip_subnet}" -p tcp --dport 57700 -j ACCEPT
+   iptables -I FORWARD -i "${lan_adapter}" -o "${vpn_adapter}" -s "${docker_lan_ip_subnet}" -p tcp --sport 58800:59900 -j ACCEPT
+   iptables -I FORWARD -i "${lan_adapter}" -o "${lan_adapter}" -s "${docker_lan_ip_subnet}" -p udp --sport 57700 -j ACCEPT
 
    CreateLoggingRules
 }
 
 GetLANInfo(){
    lan_ip="$(hostname -i)"
+   host_network_route="${lan_ip%.*}.1"
    broadcast_address="$(ip -4 addr | grep "${lan_ip}" | awk '{print $4}')"
    docker_lan_ip_subnet="$(ip -4 route | grep "${lan_ip}" | grep -v via | awk '{print $1}')"
-   lan_adapter="$(ip addr | grep eth.$ | awk '{print $7}')"
+   lan_adapter="$(ip -o addr | grep eth. | awk '{print $2}')"
    vpn_port="$(grep "remote " "${app_base_dir}/${pia_config_file}" | awk '{print $3}')"
    echo "$(date '+%c') LAN Adapter: ${lan_adapter}"
    echo "$(date '+%c') LAN IP Address: ${lan_ip}"
    echo "$(date '+%c') Host network: ${host_lan_ip_subnet}"
+   echo "$(date '+%c') Route to host network: ${host_network_route}"
    echo "$(date '+%c') Docker network: ${docker_lan_ip_subnet}"
    echo "$(date '+%c') Docker network broadcast address: ${broadcast_address}"
 }
 
 GetVPNInfo(){
-   vpn_ip="$(ip addr | grep tun.$ | awk '{print $2}')"
-   vpn_adapter="$(ip addr | grep tun.$ | awk '{print $7}')"
+   vpn_cidr_ip="$(ip -o addr | grep tun. | awk '{print $4}')"
+   vpn_ip="${vpn_cidr_ip%/*}"
+   vpn_adapter="$(ip -o addr | grep tun. | awk '{print $2}')"
    vpn_default_gateway="$(route | grep tun.$ | grep default | awk '{print $2}')"
-   echo "$(date '+%c') VPN Info: ${vpn_adapter} ${vpn_ip} ${vpn_port}"
+   echo "$(date '+%c') VPN Info: ${vpn_adapter} ${vpn_cidr_ip} ${vpn_ip} ${vpn_port}"
+   echo "$(date '+%c') Enable NAT on VPN adapter"
+   iptables -t nat -A POSTROUTING -o "${vpn_adapter}" -j MASQUERADE
 }
 
 CheckPortForwardingServer(){
